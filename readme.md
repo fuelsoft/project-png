@@ -12,8 +12,7 @@ This requires the Clang frontend. You may be able to substitute GCC in for Clang
 Beyond that, there are no requirements.
 ## How do I use it?
 ### So far:
-You can build it by running `make`
-Then, run it with `./png <input>` where the input is a file.
+You can build it by running `make`, then run it with `./png <input>` where the input is a file.
 * Non-PNGs will result in an error and program termination (not a crash - expected)
 * Valid PNGs will result in details of the leading IHDR chunk being printed out
 * Invalid PNGs may or may not be caught, this is todo
