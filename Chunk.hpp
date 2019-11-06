@@ -9,22 +9,25 @@ NICK WILSON
 
 #include <string>
 #include <cmath>
+#include <vector>
 
 class Chunk{
 private:
-	bool public_;
+	// bool public_;
 
 public:
 	uint32_t length;
 	uint32_t type;
-	uint64_t offset;
+	std::vector<uint8_t> data;
 	uint32_t crc;
 
 	Chunk() {}
-	Chunk(uint32_t length, uint32_t type, uint64_t offset, uint32_t crc);
+	Chunk(uint32_t length, uint32_t type, std::vector<uint8_t> data, uint32_t crc);
+	~Chunk();
 
 	bool validate();
-	std::string print();
+	std::string format();
+	std::string name();
 };
 
 #endif

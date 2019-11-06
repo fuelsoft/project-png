@@ -7,11 +7,15 @@ NICK WILSON
 #include "Chunk.hpp"
 
 /* Constructor */
-Chunk::Chunk(uint32_t length, uint32_t type, uint64_t offset, uint32_t crc) {
+Chunk::Chunk(uint32_t length, uint32_t type, std::vector<uint8_t> data, uint32_t crc) {
 	this->length = length;
 	this->type = type;
-	this->offset = offset;
+	this->data = data;
 	this->crc = crc;
+}
+
+Chunk::~Chunk() {
+	//nothing to do here yet
 }
 
 /* Validate CRC */
@@ -20,7 +24,24 @@ bool Chunk::validate() {
 }
 
 /* Debug Chunk details prinout */
-/* TODO: type printout not safe */
-std::string Chunk::print() {
-	return std::to_string(length) + " " + ((char *) &type) + " " + std::to_string(offset) + " " + std::to_string(crc);
+std::string Chunk::format() {
+	std::string r = "SIZE: "
+					+ std::to_string(length) 
+					+ "\nTYPE: \"" 
+					+ ((char *) &type)[0]
+					+ ((char *) &type)[1]
+					+ ((char *) &type)[2]
+					+ ((char *) &type)[3] 
+					+ "\"\nCRC: " 
+					+ std::to_string(crc);
+	return r;
+}
+
+std::string Chunk::name() {
+	std::string r;
+	r.push_back(((char *) &type)[0]);
+	r.push_back(((char *) &type)[1]);
+	r.push_back(((char *) &type)[2]);
+	r.push_back(((char *) &type)[3]);
+	return r;
 }
