@@ -80,8 +80,16 @@ int main(int argc, char const *argv[]) {
 	while (input.tellg() < png_filesize) {
 		/* Read Chunk */
 		chunk_length = read32_i(input);
+
+		/* Confirm it doesn't run past the end of the file */
+		if ((int) input.tellg() + chunk_length + sizeof(chunk_crc) >= png_filesize) {
+			cerr << "Reached EOF before all chunks were loaded. Is the PNG corrupted?" << endl;
+			return 5;
+		}
+
+		/* Ensure vector has enough space up front for copy */
+		chunk_data.resize(chunk_length);
 		chunk_type = read32(input);
-		chunk_data.resize(chunk_length); // Ensure vector has enough space up front for copy
 		input.read((char *) chunk_data.data(), chunk_length); // Copy Chunk Data data (hmm)
 		chunk_crc = read32_i(input);
 
