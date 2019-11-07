@@ -26,7 +26,6 @@ public:
 	~Chunk();
 
 	bool validate();
-	std::string format();
 	std::string name();
 };
 

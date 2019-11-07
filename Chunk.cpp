@@ -23,20 +23,6 @@ bool Chunk::validate() {
 	return true;
 }
 
-/* Debug Chunk details prinout */
-std::string Chunk::format() {
-	std::string r = "SIZE: "
-					+ std::to_string(length) 
-					+ "\nTYPE: \"" 
-					+ ((char *) &type)[0]
-					+ ((char *) &type)[1]
-					+ ((char *) &type)[2]
-					+ ((char *) &type)[3] 
-					+ "\"\nCRC: " 
-					+ std::to_string(crc);
-	return r;
-}
-
 std::string Chunk::name() {
 	std::string r;
 	r.push_back(((char *) &type)[0]);
