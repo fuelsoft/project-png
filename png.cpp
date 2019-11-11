@@ -11,6 +11,7 @@ NICK WILSON
 #include <vector>
 
 #include <arpa/inet.h>
+#include <sys/stat.h>
 
 #include "Chunk.hpp"
 
@@ -22,6 +23,10 @@ const std::string PNG_TYPES_COLOUR[] = {"GREYSCALE", "INVALID", "COLOUR", "PALLE
 const std::string PNG_TYPES_COMPRESSION[] = {"DEFLATE W/ 32K WINDOW"};
 const std::string PNG_TYPES_FILTER[] = {"NONE"};
 const std::string PNG_TYPES_INTERLACE[] = {"NONE", "ADAM7"};
+
+/* PNG writing constants */
+const std::string CHUNK_TYPE_INDEX = "fiDX";
+const std::string CHUNK_TYPE_FILE = "fiLE";
 
 /* General error checking */
 const uint64_t PNG_MIN_SIZE = 0x00; //TODO: Calculate this
@@ -44,36 +49,35 @@ int read32(ifstream &input) {
 
 int main(int argc, char const *argv[]) {
 	uint8_t chunk_leading_bytes[8];
-	uint32_t chunk_type, chunk_crc;
-	uint64_t png_filesize, chunk_length;
+	uint32_t chunk_type, chunk_crc, chunk_length;
+	uint64_t png_filesize;
 
 	vector<uint8_t> chunk_data;
 	vector<Chunk> chunks;
 
-	// char temp_char;
-
-	if (argc != 2) {
-		cerr << "Usage: ./png <filename>" << endl;
+	if (argc != 3) {
+		cerr << "Usage: ./png <png filename> <target filename>" << endl;
 		return 1;
 	}
 
-	ifstream input(argv[1], ios::binary | ios::in | ios::ate);
+	ifstream input_A(argv[1], ios::binary | ios::in | ios::ate);
 
-	if (!input.is_open()) {
+	if (!input_A.is_open()) {
 		cerr << "Could not read file \"" << argv[1] << "\"" << endl;
 		return 1;
 	}
 
-	png_filesize = input.tellg();
-	input.clear();
-	input.seekg(0);
+	/* TODO: Get this from stat call instead */
+	png_filesize = input_A.tellg();
+	input_A.clear();
+	input_A.seekg(0);
 
 	if (png_filesize < PNG_MIN_SIZE) {
 		cerr << "PNG file is too small. Is it corrupted?" << endl;
 		return 1;
 	}
 
-	input.read(reinterpret_cast<char *>(&chunk_leading_bytes), 8);
+	input_A.read(reinterpret_cast<char *>(&chunk_leading_bytes), 8);
 
 	/* File should lead with [89 50 4E 47 0D 0A 1A 0A] by RFC 2083 */
 	for (int i = 0; i < 8; i++) {
@@ -86,21 +90,21 @@ int main(int argc, char const *argv[]) {
 	cout << "Valid PNG" << endl;
 	cout << "Filesize: " << png_filesize << " bytes\n" << endl;
 
-	while (input.tellg() < png_filesize) {
+	while (input_A.tellg() < png_filesize) {
 		/* Read Chunk */
-		chunk_length = read32_i(input);
+		chunk_length = read32_i(input_A);
 
 		/* Confirm it doesn't run past the end of the file */
-		if ((int) input.tellg() + chunk_length + sizeof(chunk_crc) >= png_filesize) {
+		if ((int) input_A.tellg() + chunk_length + sizeof(chunk_crc) >= png_filesize) {
 			cerr << "Reached EOF before all chunks were loaded. Is the PNG corrupted?" << endl;
 			return 1;
 		}
 
 		/* Ensure vector has enough space up front for copy */
 		chunk_data.resize(chunk_length);
-		chunk_type = read32(input);
-		input.read(reinterpret_cast<char *>(chunk_data.data()), chunk_length); // Copy Chunk Data data (hmm)
-		chunk_crc = read32_i(input);
+		chunk_type = read32(input_A);
+		input_A.read(reinterpret_cast<char *>(chunk_data.data()), chunk_length); // Copy Chunk Data data (hmm)
+		chunk_crc = read32_i(input_A);
 
 		/* Push new Chunk to Chunk vector */
 		chunks.emplace_back(chunk_length, chunk_type, move(chunk_data), chunk_crc);
@@ -113,6 +117,7 @@ int main(int argc, char const *argv[]) {
 		cout << "Data length: " << chunk_length << " bytes" << endl;
 	}
 
+	input_A.close();
 	cout << "Chunk count: " << chunks.size() << endl;
 
 	/* First chunk MUST be of type IHDR by RFC 2083 */
@@ -173,5 +178,23 @@ int main(int argc, char const *argv[]) {
 	cout << "Filter method: " << (int) filter << " [" << PNG_TYPES_FILTER[filter] << "]" << endl;
 	cout << "Interlace method: " << (int) interlace << " [" << PNG_TYPES_INTERLACE[interlace] << "]" << endl;
 
+	/* process file 2 */
+	cout << "\nOpening target file \"" << argv[2] << "\"" << endl;
+
+	ifstream input_B(argv[2], ios::binary | ios::in | ios::ate);
+
+	if (!input_B.is_open()) {
+		cerr << "Could not read file \"" << argv[2] << "\"" << endl;
+		return 1;
+	}
+
+	struct stat result;
+
+	if (stat(argv[2], &result)) {
+		cerr << "Could not read file details for \"" << argv[2] << "\"" << endl;
+		return 1;
+	}
+
+	input_B.close();
 	return 0;
 }
