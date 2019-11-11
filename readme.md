@@ -13,10 +13,13 @@ Beyond that, there are no requirements.
 
 ## How do I use it?
 ### So far:
-You can build it by running `make`, then run it with `./png <input>` where the input is a file.
+You can build it by running `make`, then run it with `./png <png file> <target file>` where:
+* `<png file>` is the PNG file you wish to work with.
+* `<target file>` is another file (it could also be a png, it doesn't matter) that you wish to work with.
+
 The following are possible outcomes:
-* Non-PNGs will result in an error and program termination (not a crash - expected)
-* Valid PNGs will result in details of the leading IHDR chunk being printed out
+* Non-PNGs will result in an error and program termination (not a crash - expected).
+* Valid PNGs will result in details of the leading IHDR chunk being printed out.
 * Invalid PNGs will most likely be caught and the error reported, but I make no promises.
 
 Once the image is loaded, the program will check the signature at the start of the file. Once this is confirmed, it continues to load all the image chunks into memory, performing checks and logging progress as it goes. Once the image is loaded, the program returns to the leading IHDR block and extracts image data related to dimensions, bit depth and more, which it prints out.
