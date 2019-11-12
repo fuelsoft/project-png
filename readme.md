@@ -25,6 +25,5 @@ The following are possible outcomes:
 Once the image is loaded, the program will check the signature at the start of the file. Once this is confirmed, it continues to load all the image chunks into memory, performing checks and logging progress as it goes. Once the image is loaded, the program returns to the leading IHDR block and extracts image data related to dimensions, bit depth and more, which it prints out.
 
 #### TODO:
-* Checksum validation - this is important to image integrity checking.
 * Storage format design.
 * Custom chunk design.
