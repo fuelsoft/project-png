@@ -118,7 +118,16 @@ int main(int argc, char const *argv[]) {
 	}
 
 	input_A.close();
-	cout << "Chunk count: " << chunks.size() << endl;
+	cout << "Chunk count: " << chunks.size() << "\n" << endl;
+
+	cout << "Validating chunks..." << endl; 
+	for (int i = 0; i < chunks.size(); i++) {
+		if (!chunks[i].validate()) {
+			cerr << "Chunk " << i << " failed validation!" << endl;
+			return 1;
+		}
+	}
+	cout << "Chunks all validated!" << endl;
 
 	/* First chunk MUST be of type IHDR by RFC 2083 */
 	/* IHDR chunk MUST have 13 bytes of data */
