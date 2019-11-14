@@ -12,6 +12,7 @@ NICK WILSON
 
 #include <arpa/inet.h>
 #include <sys/stat.h>
+#include <string.h>
 
 #include "Chunk.hpp"
 
@@ -27,6 +28,7 @@ const std::string PNG_TYPES_INTERLACE[] = {"NONE", "ADAM7"};
 /* PNG writing constants */
 const std::string CHUNK_TYPE_INDEX = "fiDX";
 const std::string CHUNK_TYPE_FILE = "fiLE";
+const uint32_t CHUNK_SIZE_DATA_MAX = 0xFFFFFFFF;
 
 /* General error checking */
 const uint64_t PNG_MIN_SIZE = 0x00; //TODO: Calculate this
@@ -47,10 +49,16 @@ int read32(ifstream &input) {
 	return x;
 }
 
+uint32_t as_type(string str) {
+	if (str.length() < 4) return 0;
+	return (str[3] << 24) + (str[2] << 16) + (str[1] << 8) + str[0];
+}
+
 int main(int argc, char const *argv[]) {
 	uint8_t chunk_leading_bytes[8];
 	uint32_t chunk_type, chunk_crc, chunk_length;
 	uint64_t png_filesize;
+	string png_filename;
 
 	vector<uint8_t> chunk_data;
 	vector<Chunk> chunks;
@@ -60,17 +68,22 @@ int main(int argc, char const *argv[]) {
 		return 1;
 	}
 
-	ifstream input_A(argv[1], ios::binary | ios::in | ios::ate);
+	struct stat file_A;
+	png_filename = argv[1];
 
-	if (!input_A.is_open()) {
-		cerr << "Could not read file \"" << argv[1] << "\"" << endl;
+	if (stat(png_filename.c_str(), &file_A)) {
+		cerr << "Could not read file details for \"" << png_filename << "\"" << endl;
 		return 1;
 	}
 
-	/* TODO: Get this from stat call instead */
-	png_filesize = input_A.tellg();
-	input_A.clear();
-	input_A.seekg(0);
+	png_filesize = file_A.st_size;
+
+	ifstream input_A(png_filename, ios::binary | ios::in);
+
+	if (!input_A.is_open()) {
+		cerr << "Could not read file \"" << png_filename << "\"" << endl;
+		return 1;
+	}
 
 	if (png_filesize < PNG_MIN_SIZE) {
 		cerr << "PNG file is too small. Is it corrupted?" << endl;
@@ -187,23 +200,116 @@ int main(int argc, char const *argv[]) {
 	cout << "Filter method: " << (int) filter << " [" << PNG_TYPES_FILTER[filter] << "]" << endl;
 	cout << "Interlace method: " << (int) interlace << " [" << PNG_TYPES_INTERLACE[interlace] << "]" << endl;
 
-	/* process file 2 */
-	cout << "\nOpening target file \"" << argv[2] << "\"" << endl;
+	/* Process target file */
+	string file_filename = argv[2];
 
-	ifstream input_B(argv[2], ios::binary | ios::in | ios::ate);
+	/* 	This should never be triggered. 
+	No modern FS supports filenames this long.
+	This is here to enforce a sane limit to the length of filenames 
+	so that the index chunk doesn't overflow the 32 bit length value.
+	*/
+	if (file_filename.length() > 0xFF) {
+		cerr << "Somehow you've exceeed the maximum filename size. Congratulations." << endl;
+		cerr << "Unfortunately, this filename is too long to encode." << endl;
+		return 1;
+	}
 
+	cout << "\nOpening target file \"" << file_filename << "\"" << endl;
+
+	/* Extract file metadata */
+	struct stat file_B;
+	if (stat(file_filename.c_str(), &file_B)) {
+		cerr << "Could not read file details for \"" << file_filename << "\"" << endl;
+		return 1;
+	}
+
+	uint64_t file_filesize = file_B.st_size;
+	uint32_t file_time_cr  = file_B.st_ctime;
+	uint32_t file_time_mod = file_B.st_mtime;
+
+	cout << "Filesize: " << file_filesize << " bytes" << endl;
+
+	/* Test if file exceeds size limit for a single chunk */
+	/* TODO: Span multiple chunks */
+	if (file_filesize > CHUNK_SIZE_DATA_MAX) {
+		cout << "NOTE: \"" << file_filename << "\" will span multiple chunks due to size." << endl;
+		cout << "NOTE: Chunks required: " << ceil(file_filesize / CHUNK_SIZE_DATA_MAX) << endl;
+		return 1;
+	}
+
+	/* Open file stream to read data */
+	ifstream input_B(file_filename, ios::binary | ios::in);
 	if (!input_B.is_open()) {
-		cerr << "Could not read file \"" << argv[2] << "\"" << endl;
+		cerr << "Could not read file \"" << file_filename << "\"" << endl;
 		return 1;
 	}
 
-	struct stat result;
+	//For now, assume only one data chunk required
+	vector<uint8_t> file_data;
 
-	if (stat(argv[2], &result)) {
-		cerr << "Could not read file details for \"" << argv[2] << "\"" << endl;
+	/* Hard cap at 1 GB */
+	/* TODO: Deal with this limitation */
+	if (file_filesize > 0x40000000) {
+		cerr << "File too large to be loaded into memory!" << endl;
 		return 1;
 	}
 
+	file_data.resize(file_filesize);
+	input_B.read(reinterpret_cast<char *>(file_data.data()), file_filesize);	
 	input_B.close();
+
+	Chunk file(file_data.size(), as_type(CHUNK_TYPE_FILE), move(file_data), 0);
+	file.force_crc_update();
+
+	//Create index chunk
+	vector<uint8_t> idx_data;
+
+	/* Create index chunk */
+	idx_data.resize(sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint64_t) + file_filename.length());
+	memcpy(idx_data.data(), &file_time_cr, sizeof(uint32_t));
+	memcpy(idx_data.data() + sizeof(uint32_t), &file_time_mod, sizeof(uint32_t));
+	memcpy(idx_data.data() + 2 * sizeof(uint32_t), &file_filesize, sizeof(uint64_t));
+	memcpy(idx_data.data() + 4 * sizeof(uint32_t), file_filename.c_str(), file_filename.length());
+
+	Chunk index(idx_data.size(), as_type(CHUNK_TYPE_INDEX), move(idx_data), 0);
+	index.force_crc_update();
+
 	return 0;
 }
+
+/* TODO: 
+	-Single instance of CRC table
+	-Don't load large files, copy in chunks
+	-Multiple file chunk support
+	-Calculate minimum PNG size
+*/
+
+/*
+PROPOSED:
+
+INDEX CHUNK:
+
+4 byte unsigned length (per PNG spec)
+4 byte type (per PNG spec)
+N byte data:
+	8 byte filesize
+	4 byte creation time
+	4 byte modification time
+	N byte filename
+4 byte CRC (per PNG spec)
+
+Limitations:
+	Only one per image
+	Before all file data chunks
+	Only in legal positions - after IHDR, before IEND, etc.
+
+FILE CHUNK:
+
+4 byte unsigned length (per PNG spec)
+4 byte type (per PNG spec)
+N byte data
+4 byte CRC (per PNG spec)
+
+Limitations:
+	Only in legal positions - after IHDR, before IEND, etc.
+*/

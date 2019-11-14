@@ -68,6 +68,16 @@ Chunk::~Chunk() {
 	//nothing to do here yet
 }
 
+std::vector<uint8_t> pack() {
+	std::vector<uint8_t> v;
+	return v;
+}
+
+/* Force the stored CRC to be recalculated */
+void Chunk::force_crc_update() {
+	this->crc = get_crc();
+}
+
 /* Validate CRC */
 bool Chunk::validate() {
 	return crc == get_crc();
