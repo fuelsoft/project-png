@@ -68,9 +68,16 @@ Chunk::~Chunk() {
 	//nothing to do here yet
 }
 
-std::vector<uint8_t> pack() {
-	std::vector<uint8_t> v;
-	return v;
+std::vector<uint8_t> Chunk::pack() {
+	uint32_t l = htonl(data.size());
+	uint32_t c = htonl(crc);
+	std::vector<uint8_t> data_temp;
+	data_temp.resize(sizeof(uint32_t) + sizeof(uint32_t) + data.size() + sizeof(uint32_t));
+	memcpy(data_temp.data(), &l, sizeof(uint32_t));
+	memcpy(data_temp.data() + sizeof(uint32_t), &type, sizeof(uint32_t));
+	memcpy(data_temp.data() + 2 * sizeof(uint32_t), data.data(), data.size());
+	memcpy(data_temp.data() + 2 * sizeof(uint32_t) + data.size(), &c, sizeof(uint32_t));
+	return data_temp;
 }
 
 /* Force the stored CRC to be recalculated */

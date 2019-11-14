@@ -10,7 +10,9 @@ NICK WILSON
 #include <string>
 #include <cmath>
 #include <vector>
+
 #include <string.h>
+#include <arpa/inet.h>
 
 class Chunk{
 private:
@@ -19,7 +21,7 @@ private:
 
 	uint32_t length;
 	uint32_t type;
-	// uint32_t crc;
+	uint32_t crc;
 
 	void make_crc_table();
 	uint64_t update_crc(uint64_t crc, uint8_t *buf, uint32_t len);
@@ -29,8 +31,6 @@ private:
 public:
 
 	std::vector<uint8_t> data;
-
-	uint32_t crc;
 
 	Chunk() {}
 	Chunk(uint32_t length, uint32_t type, std::vector<uint8_t> data, uint32_t crc);

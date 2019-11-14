@@ -73,8 +73,8 @@ int main(int argc, char const *argv[]) {
 	vector<uint8_t> chunk_data;
 	vector<Chunk> chunks;
 
-	if (argc != 3) {
-		cerr << "Usage: ./png <png filename> <target filename>" << endl;
+	if (argc != 4) {
+		cerr << "Usage: ./png <png filename> <target filename> <output>" << endl;
 		return 1;
 	}
 
@@ -144,7 +144,7 @@ int main(int argc, char const *argv[]) {
 	cout << "Chunk count: " << chunks.size() << "\n" << endl;
 
 	cout << "Validating chunks..." << endl; 
-	for (int i = 0; i < chunks.size(); i++) {
+	for (uint32_t i = 0; i < chunks.size(); i++) {
 		if (!chunks[i].validate()) {
 			cerr << "Chunk " << i << " failed validation!" << endl;
 			return 1;
@@ -283,6 +283,31 @@ int main(int argc, char const *argv[]) {
 
 	Chunk index(idx_data.size(), as_type(CHUNK_TYPE_INDEX), move(idx_data), 0);
 	index.force_crc_update();
+
+	ofstream output_C(argv[3], ios::binary | ios::out);
+
+	if (!output_C.is_open()) {
+		cerr << "Could not open \"" << argv[3] << "\" for writing!" << endl;
+		return 1;
+	}
+
+	/* Figure out where to insert chunks */
+	/* IHRD known to be leading chunk from above */
+
+	chunks.insert(chunks.begin() + 1, index);
+
+	/* Insert data immediately after */
+
+	chunks.insert(chunks.begin() + 2, file);
+
+	vector<uint8_t> tmp;
+
+	output_C.write(reinterpret_cast<const char *>(PNG_SIGNATURE), 8);
+
+	for (uint32_t i = 0; i < chunks.size(); i++) {
+		tmp = chunks[i].pack();
+		output_C.write(reinterpret_cast<char *>(tmp.data()), tmp.size());
+	}
 
 	return 0;
 }
