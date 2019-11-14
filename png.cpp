@@ -31,7 +31,17 @@ const std::string CHUNK_TYPE_FILE = "fiLE";
 const uint32_t CHUNK_SIZE_DATA_MAX = 0xFFFFFFFF;
 
 /* General error checking */
-const uint64_t PNG_MIN_SIZE = 0x00; //TODO: Calculate this
+const uint64_t PNG_MIN_SIZE = 0x39;
+/*
+SIGNATURE: 8
+IHDR: 4 + 4 + N + 4
+	N: 13
+IDAT: 4 + 4 + N + 4
+	N: 0
+IEND: 4 + 4 + N + 4
+	N: 0
+TOTAL: 57 (0x39)
+*/
 
 using namespace std;
 
@@ -281,7 +291,6 @@ int main(int argc, char const *argv[]) {
 	-Single instance of CRC table
 	-Don't load large files, copy in chunks
 	-Multiple file chunk support
-	-Calculate minimum PNG size
 */
 
 /*
