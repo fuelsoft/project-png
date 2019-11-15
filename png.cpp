@@ -98,11 +98,10 @@ int main(int argc, char const *argv[]) {
 	for (int i = 1; i < argc; i++) {
 		if (argv[i][0] == '-') {
 			switch (argv[i][1]) {
-				case 'd':
-					print_debug = true;
-					break;
 				case 'a':
 					mode = 0;
+				case 'd':
+					print_debug = true;
 					break;
 				case 'i':
 					mode = 1;
@@ -149,8 +148,6 @@ int main(int argc, char const *argv[]) {
 		print_usage();
 		return 1;
 	}
-
-	// return 0;
 
 	struct stat file_A;
 	png_filename = filenames[0];
@@ -230,7 +227,66 @@ int main(int argc, char const *argv[]) {
 
 	/* Extraction Mode */
 	if (mode == 2) {
-		/* Extraction routine here */
+
+		uint32_t idx_pos = 0;
+		uint32_t dat_pos = 0;
+
+		cout << endl;
+
+		for (int i = 0; i < chunks.size(); i++) {
+			if (chunks[i].name() == CHUNK_TYPE_INDEX) {
+				idx_pos = i;
+				break;
+			}
+		}
+		if (!idx_pos) {
+			cerr << "No index chunk present!" << endl;
+			return 1;
+		}
+		if (print_debug) cout << "Index chunk located: " << idx_pos << endl;
+
+		// uint32_t file_time_cr, file_time_mod;
+		string out_filename;
+
+		if (chunks[idx_pos].length <= 2 * sizeof(uint32_t) + sizeof(uint64_t)) {
+			cerr << "Empty filename!" << endl;
+			return 1;
+		}
+
+		for (int i = (2 * sizeof(uint32_t) + sizeof(uint64_t)); i < chunks[idx_pos].length; i++) {
+			out_filename += chunks[idx_pos].data.data()[i];
+		}
+
+		if (print_debug) cout << "Filename located: \"" << out_filename << "\"" << endl;
+
+		for (int i = idx_pos; i < chunks.size(); i++) {
+			if (chunks[i].name() == CHUNK_TYPE_FILE) {
+				dat_pos = i;
+				break;
+			}
+		}
+		if (!dat_pos) {
+			cerr << "No file data chunk present!" << endl;
+			return 1;
+		}
+		if (print_debug) cout << "File data chunk located: " << dat_pos << endl;
+
+		/* Avoid overwriting an existing file */
+		/* TODO: Check if file exists */
+		out_filename += "_EX";
+
+		ofstream output_D(out_filename, ios::binary | ios::out);
+
+		if (!output_D.is_open()) {
+			cerr << "Could not extract file \"" << out_filename << "\"" << endl;
+			return 1;
+		}
+
+		output_D.write(reinterpret_cast<const char *>(chunks[dat_pos].data.data()), chunks[dat_pos].data.size());
+
+		/* TODO: Add modification/creation time */
+		output_D.close();
+
 		return 0;
 	}
 

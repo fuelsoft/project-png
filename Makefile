@@ -3,7 +3,7 @@ INC_FILES = Chunk.cpp
 HEADER_FILES = Chunk.hpp
 OUTPUT = png
 COMPILER = clang++
-OPT_LEVEL = -g
+OPT_LEVEL = -O2
 STD = -std=c++11
 
 make: $(BASE_FILE) $(INC_FILES) $(HEADER_FILES)
