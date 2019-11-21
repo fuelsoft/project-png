@@ -13,6 +13,8 @@ NICK WILSON
 #include <arpa/inet.h>
 #include <sys/stat.h>
 #include <string.h>
+#include <time.h>
+#include <utime.h>
 
 #include "Chunk.hpp"
 
@@ -65,6 +67,7 @@ int read32(ifstream &input) {
 	return x;
 }
 
+/* Take pre-defined string type and return four bytes */
 uint32_t as_type(string str) {
 	if (str.length() < 4) return 0;
 	return (str[3] << 24) + (str[2] << 16) + (str[1] << 8) + str[0];
@@ -149,6 +152,7 @@ int main(int argc, char const *argv[]) {
 		return 1;
 	}
 
+	/* Read file details from first file */
 	struct stat file_A;
 	png_filename = filenames[0];
 
@@ -159,6 +163,7 @@ int main(int argc, char const *argv[]) {
 
 	png_filesize = file_A.st_size;
 
+	/* Open first file (PNG) */
 	ifstream input_A(png_filename, ios::binary | ios::in);
 
 	if (!input_A.is_open()) {
@@ -184,6 +189,7 @@ int main(int argc, char const *argv[]) {
 	if (print_debug) cout << "Valid PNG" << endl;
 	if (print_debug) cout << "Filesize: " << png_filesize << " bytes\n" << endl;
 
+	/* Read all of PNG into memory and break it into chunks */
 	while (input_A.tellg() < png_filesize) {
 		/* Read Chunk */
 		chunk_length = read32_i(input_A);
@@ -231,44 +237,58 @@ int main(int argc, char const *argv[]) {
 		uint32_t idx_pos = 0;
 		uint32_t dat_pos = 0;
 
-		cout << endl;
+		if (print_debug) cout << endl;
 
+		/* Look for index chunk, if present */
 		for (int i = 0; i < chunks.size(); i++) {
 			if (chunks[i].name() == CHUNK_TYPE_INDEX) {
 				idx_pos = i;
 				break;
 			}
 		}
+
+		/* Index position still 0, which is impossible as IHDR must be first */
 		if (!idx_pos) {
 			cerr << "No index chunk present!" << endl;
 			return 1;
 		}
+
 		if (print_debug) cout << "Index chunk located: " << idx_pos << endl;
 
-		// uint32_t file_time_cr, file_time_mod;
+		uint32_t file_time_cr, file_time_mod;
 		string out_filename;
 
+		/* Error checking */
 		if (chunks[idx_pos].length <= 2 * sizeof(uint32_t) + sizeof(uint64_t)) {
 			cerr << "Empty filename!" << endl;
 			return 1;
 		}
 
+		/* Build filename */
 		for (int i = (2 * sizeof(uint32_t) + sizeof(uint64_t)); i < chunks[idx_pos].length; i++) {
 			out_filename += chunks[idx_pos].data.data()[i];
 		}
 
 		if (print_debug) cout << "Filename located: \"" << out_filename << "\"" << endl;
 
+		/* Extract file creation and modification time */
+		memcpy(&file_time_cr, chunks[idx_pos].data.data(), sizeof(uint32_t));
+		memcpy(&file_time_mod, chunks[idx_pos].data.data() + sizeof(uint32_t), sizeof(uint32_t));
+
+		/* Search for data chunk, which must come after index chunk */
 		for (int i = idx_pos; i < chunks.size(); i++) {
 			if (chunks[i].name() == CHUNK_TYPE_FILE) {
 				dat_pos = i;
 				break;
 			}
 		}
+
+		/* Data chunk was not found */
 		if (!dat_pos) {
 			cerr << "No file data chunk present!" << endl;
 			return 1;
 		}
+
 		if (print_debug) cout << "File data chunk located: " << dat_pos << endl;
 
 		/* Avoid overwriting an existing file */
@@ -282,10 +302,18 @@ int main(int argc, char const *argv[]) {
 			return 1;
 		}
 
+		/* Dump data chunk data into file */
 		output_D.write(reinterpret_cast<const char *>(chunks[dat_pos].data.data()), chunks[dat_pos].data.size());
-
-		/* TODO: Add modification/creation time */
 		output_D.close();
+
+		/* Write creation and modification time to file */
+		struct utimbuf out_time;
+		out_time.actime = file_time_cr;
+		out_time.modtime = file_time_mod;
+
+		if (utime(out_filename.c_str(), &out_time)) {
+			cout << "Operation completed, but could not write file creation/modification time to file." << endl;
+		}
 
 		return 0;
 	}
@@ -360,9 +388,9 @@ int main(int argc, char const *argv[]) {
 	string file_filename = filenames[1];
 
 	/*  This should never be triggered. 
-	No modern FS supports filenames this long.
-	This is here to enforce a sane limit to the length of filenames 
-	so that the index chunk doesn't overflow the 32 bit length value.
+		No modern FS supports filenames this long.
+		This is here to enforce a sane limit to the length of filenames 
+		so that the index chunk doesn't overflow the 32 bit length value.
 	*/
 	if (file_filename.length() > 0xFF) {
 		cerr << "Somehow you've exceeed the maximum filename size. Congratulations." << endl;
@@ -379,7 +407,12 @@ int main(int argc, char const *argv[]) {
 		return 1;
 	}
 
+	/* Grab filesize, file creation and modification times */
 	uint64_t file_filesize = file_B.st_size;
+
+	/* 	These may need to be a larger type, time_t is not consistant
+		across operating systems and appears to range from 32 to 64
+		bytes (less relevant, but it can also be int or float). */
 	uint32_t file_time_cr  = file_B.st_ctime;
 	uint32_t file_time_mod = file_B.st_mtime;
 
