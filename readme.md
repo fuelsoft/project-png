@@ -48,7 +48,7 @@ The following are possible outcomes for insertion mode:
 
 The following are possible outcomes for extraction mode:
 * Non-PNGs will result in an error and program termination.
-* Valid PNGs will result in the inserted image being written out to disk **under its original filename**.
+* Valid PNGs will result in the inserted image being written out to disk **under a modified filename**.
 * Invalid PNGs may be caught and the error reported, but this mode only does basic error checking.
 
 *Here's a fun activity: `./png -i <your png> png.cpp test.png`, then look at a hexdump of `test.png`*

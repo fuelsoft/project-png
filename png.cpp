@@ -30,7 +30,11 @@ const std::string PNG_TYPES_INTERLACE[] = {"NONE", "ADAM7"};
 /* PNG writing constants */
 const std::string CHUNK_TYPE_INDEX = "fiDX";
 const std::string CHUNK_TYPE_FILE = "fiLE";
-const uint32_t CHUNK_SIZE_DATA_MAX = 0xFFFFFFFF;
+
+/* By trial and error, this seems to be about the biggest size permitted by most programs */
+/* This seems to contradict the spec which states it may be up to 2^31 - 1 */
+/* Programs should just skip these chunks but they don't. Instead, they crash :D */
+const uint32_t CHUNK_SIZE_DATA_MAX = 0x700000;
 
 /* General error checking */
 const uint64_t PNG_MIN_SIZE = 0x39;
@@ -214,8 +218,7 @@ int main(int argc, char const *argv[]) {
 
 		/* Debug - Chunk data printout */
 		if (print_debug) {
-			cout << "Chunk Type: " << chunks[chunks.size() - 1].name() << endl;
-			cout << "Data Length: " << chunk_length << " bytes" << endl;
+			cout << "Chunk Type: " << chunks[chunks.size() - 1].name() << " | Length: " << chunk_length << " bytes" << endl;
 		}
 	}
 
@@ -231,21 +234,30 @@ int main(int argc, char const *argv[]) {
 	}
 	if (print_debug) cout << "Chunks all validated!" << endl;
 
+	uint32_t idx_pos = 0;
+	uint32_t dat_pos = 0;
+
+	/* Look for index chunk, if present */
+	for (int i = 0; i < chunks.size(); i++) {
+		if (chunks[i].name() == CHUNK_TYPE_INDEX) {
+			idx_pos = i;
+			break;
+		}
+	}
+
+	/* Search for data chunk, which must come after index chunk */
+	for (int i = idx_pos; i < chunks.size(); i++) {
+		if (chunks[i].name() == CHUNK_TYPE_FILE) {
+			dat_pos = i;
+			break;
+		}
+	}
+
+
 	/* Extraction Mode */
 	if (mode == 2) {
 
-		uint32_t idx_pos = 0;
-		uint32_t dat_pos = 0;
-
 		if (print_debug) cout << endl;
-
-		/* Look for index chunk, if present */
-		for (int i = 0; i < chunks.size(); i++) {
-			if (chunks[i].name() == CHUNK_TYPE_INDEX) {
-				idx_pos = i;
-				break;
-			}
-		}
 
 		/* Index position still 0, which is impossible as IHDR must be first */
 		if (!idx_pos) {
@@ -275,14 +287,6 @@ int main(int argc, char const *argv[]) {
 		memcpy(&file_time_cr, chunks[idx_pos].data.data(), sizeof(uint32_t));
 		memcpy(&file_time_mod, chunks[idx_pos].data.data() + sizeof(uint32_t), sizeof(uint32_t));
 
-		/* Search for data chunk, which must come after index chunk */
-		for (int i = idx_pos; i < chunks.size(); i++) {
-			if (chunks[i].name() == CHUNK_TYPE_FILE) {
-				dat_pos = i;
-				break;
-			}
-		}
-
 		/* Data chunk was not found */
 		if (!dat_pos) {
 			cerr << "No file data chunk present!" << endl;
@@ -291,8 +295,17 @@ int main(int argc, char const *argv[]) {
 
 		if (print_debug) cout << "File data chunk located: " << dat_pos << endl;
 
+		/* Count how many chunks the file is split across */
+		uint32_t file_chunk_count = dat_pos;
+		while (chunks[file_chunk_count].name() == CHUNK_TYPE_FILE) {
+			file_chunk_count++;
+			if (file_chunk_count + 1 == chunks.size()) break;
+		}
+		file_chunk_count -= dat_pos;
+
+		if (print_debug) cout << "File split across " << file_chunk_count << " file chunks" << endl;
+
 		/* Avoid overwriting an existing file */
-		/* TODO: Check if file exists */
 		out_filename += "_EX";
 
 		ofstream output_D(out_filename, ios::binary | ios::out);
@@ -303,7 +316,10 @@ int main(int argc, char const *argv[]) {
 		}
 
 		/* Dump data chunk data into file */
-		output_D.write(reinterpret_cast<const char *>(chunks[dat_pos].data.data()), chunks[dat_pos].data.size());
+		for (uint32_t i = 0; i < file_chunk_count; i++) {
+			output_D.write(reinterpret_cast<const char *>(chunks[dat_pos+i].data.data()), chunks[dat_pos+i].data.size());
+		}
+
 		output_D.close();
 
 		/* Write creation and modification time to file */
@@ -381,7 +397,26 @@ int main(int argc, char const *argv[]) {
 	/* Analysis mode */
 	/* Since there is no writing to be done, terminate here */
 	if (mode == 0) {
+		if (print_debug) {
+			cout << endl;
+			cout << "Index chunk" << ((idx_pos) ? " DOES " : " DOES NOT ") << "exist!" << endl;
+			cout << "File chunks" << ((dat_pos) ? " DO " : " DO NOT ") << "exist!" << endl;
+			cout << "You WILL" << ((idx_pos && dat_pos) ? " NOT " : " ") << "be able to insert a file into this image!" << endl;
+		}
 		return 0;
+	}
+
+	if (idx_pos && dat_pos) {
+		cerr << "Index and file data already exist in input file." << endl;
+		return 1;
+	}
+	else if (dat_pos) {
+		cerr << "File data already exists in input file." << endl;
+		return 1;
+	}
+	else if (idx_pos) {
+		cerr << "Index already exists in input file." << endl;
+		return 1;
 	}
 
 	/* Process target file */
@@ -418,12 +453,12 @@ int main(int argc, char const *argv[]) {
 
 	if (print_debug) cout << "Filesize: " << file_filesize << " bytes" << endl;
 
+	uint32_t required_chunks = ceil(file_filesize / (float) CHUNK_SIZE_DATA_MAX);
+
 	/* Test if file exceeds size limit for a single chunk */
-	/* TODO: Span multiple chunks */
-	if (file_filesize > CHUNK_SIZE_DATA_MAX) {
-		cout << "NOTE: \"" << file_filename << "\" will span multiple chunks due to size." << endl;
-		cout << "NOTE: Chunks required: " << ceil(file_filesize / CHUNK_SIZE_DATA_MAX) << endl;
-		return 1;
+	if (file_filesize > CHUNK_SIZE_DATA_MAX && print_debug) {
+		cout << "File \"" << file_filename << "\" will span multiple chunks due to size." << endl;
+		cout << "Chunks required: " << required_chunks << endl;
 	}
 
 	/* Open file stream to read data */
@@ -436,24 +471,56 @@ int main(int argc, char const *argv[]) {
 	//For now, assume only one data chunk required
 	vector<uint8_t> file_data;
 
-	/* Hard cap at 1 GB */
-	/* TODO: Deal with this limitation */
-	if (file_filesize > 0x40000000) {
+	/* Hard 4 GB cap.
+		This can be extended without any real issue but keep in mind 
+		every additional bit will require at least 1 more bit of memory
+	*/
+	if (file_filesize > 0xFFFFFFFF) {
 		cerr << "File too large to be loaded into memory!" << endl;
 		return 1;
 	}
 
-	file_data.resize(file_filesize);
-	input_B.read(reinterpret_cast<char *>(file_data.data()), file_filesize);    
+	uint64_t data_remaining = file_filesize;
+	uint32_t chunks_created = 0;
+
+	/* Read in as much as possible in the biggest chunk size */
+	while (data_remaining > CHUNK_SIZE_DATA_MAX) {
+		if (print_debug) cout << "Creating chunk " << chunks_created << "... ";
+		data_remaining -= CHUNK_SIZE_DATA_MAX;
+		chunks_created++;
+
+		file_data.resize(CHUNK_SIZE_DATA_MAX);
+		input_B.read(reinterpret_cast<char *>(file_data.data()), CHUNK_SIZE_DATA_MAX);    
+
+		Chunk file(file_data.size(), as_type(CHUNK_TYPE_FILE), move(file_data), 0);
+		file.force_crc_update(); // looking for why this loop is slow? it's probably this
+		chunks.insert(chunks.begin() + chunks_created, file);
+
+		file_data.clear();
+
+		if (print_debug) cout << "done!" << endl;
+	}
+
+	/* Dump whatever is left into a smaller chunk */
+	if (data_remaining) { //don't add an empty chunk though
+		if (print_debug) cout << "Creating chunk " << chunks_created << "... ";
+		chunks_created++;
+
+		file_data.resize(data_remaining);
+		input_B.read(reinterpret_cast<char *>(file_data.data()), data_remaining);    
+
+		Chunk file(file_data.size(), as_type(CHUNK_TYPE_FILE), move(file_data), 0);
+		file.force_crc_update();
+		chunks.insert(chunks.begin() + chunks_created, file);
+		if (print_debug) cout << "done!" << endl;
+	}
+
 	input_B.close();
 
-	Chunk file(file_data.size(), as_type(CHUNK_TYPE_FILE), move(file_data), 0);
-	file.force_crc_update();
-
-	//Create index chunk
+	/* Create index chunk */
 	vector<uint8_t> idx_data;
 
-	/* Create index chunk */
+	/* Populate index chunk */
 	idx_data.resize(sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint64_t) + file_filename.length());
 	memcpy(idx_data.data(), &file_time_cr, sizeof(uint32_t));
 	memcpy(idx_data.data() + sizeof(uint32_t), &file_time_mod, sizeof(uint32_t));
@@ -475,11 +542,9 @@ int main(int argc, char const *argv[]) {
 
 	chunks.insert(chunks.begin() + 1, index);
 
-	/* Insert data immediately after */
-
-	chunks.insert(chunks.begin() + 2, file);
-
 	vector<uint8_t> tmp;
+
+	if (print_debug) cout << "Writing file to disk..." << endl;
 
 	output_C.write(reinterpret_cast<const char *>(PNG_SIGNATURE), 8);
 
@@ -498,7 +563,7 @@ int main(int argc, char const *argv[]) {
 /* TODO: 
 	-Single instance of CRC table
 	-Don't load large files, copy in chunks
-	-Multiple file chunk support
+	-Consider type for 'chunks' - would a linked list be more appropriate?
 */
 
 /*
