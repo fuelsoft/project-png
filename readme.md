@@ -56,6 +56,5 @@ The following are possible outcomes for extraction mode:
 *Alternatively, you can also try `./png -i <your png> <your png> test.png` to place the PNG within itself*
 
 #### TODO:
-* Data extraction
 * Re-write problem/weak code
-* Test various modes
+* Improve error testing

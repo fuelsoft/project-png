@@ -574,7 +574,6 @@ INDEX CHUNK:
 4 byte unsigned length (per PNG spec)
 4 byte type (per PNG spec)
 N byte data:
-	8 byte filesize
 	4 byte creation time
 	4 byte modification time
 	N byte filename
