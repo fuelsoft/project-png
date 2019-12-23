@@ -52,7 +52,7 @@ TOTAL: 57 (0x39)
 /* Debug toggle */
 bool print_debug = false;
 
-/* Program mdoe */
+/* Program mode */
 uint8_t mode = 0;
 
 using namespace std;
@@ -142,15 +142,16 @@ int main(int argc, char const *argv[]) {
 		print_usage();
 		return 1;
 	}
+
 	/* Insertion mode */
 	else if (mode == 1 && filenames.size() != 3) {
 		cerr << "Invalid arguments!" << endl;
 		print_usage();
 		return 1;
 	}
+
 	/* Extraction mode */
 	else if (mode == 2 && filenames.size() != 1) {
-		cout << filenames.size() << endl;
 		cerr << "Invalid arguments!" << endl;
 		print_usage();
 		return 1;
@@ -190,7 +191,7 @@ int main(int argc, char const *argv[]) {
 		}
 	}
 
-	if (print_debug) cout << "Valid PNG" << endl;
+	if (print_debug) cout << "PNG signature validated!" << endl;
 	if (print_debug) cout << "Filesize: " << png_filesize << " bytes\n" << endl;
 
 	/* Read all of PNG into memory and break it into chunks */
@@ -252,7 +253,6 @@ int main(int argc, char const *argv[]) {
 			break;
 		}
 	}
-
 
 	/* Extraction Mode */
 	if (mode == 2) {
@@ -425,8 +425,7 @@ int main(int argc, char const *argv[]) {
 	/*  This should never be triggered. 
 		No modern FS supports filenames this long.
 		This is here to enforce a sane limit to the length of filenames 
-		so that the index chunk doesn't overflow the 32 bit length value.
-	*/
+		so that the index chunk doesn't overflow the 32 bit length value. */
 	if (file_filename.length() > 0xFF) {
 		cerr << "Somehow you've exceeed the maximum filename size. Congratulations." << endl;
 		cerr << "Unfortunately, this filename is too long to encode." << endl;
@@ -473,8 +472,7 @@ int main(int argc, char const *argv[]) {
 
 	/* Hard 4 GB cap.
 		This can be extended without any real issue but keep in mind 
-		every additional bit will require at least 1 more bit of memory
-	*/
+		every additional bit will require at least 1 more bit of memory. */
 	if (file_filesize > 0xFFFFFFFF) {
 		cerr << "File too large to be loaded into memory!" << endl;
 		return 1;
@@ -486,10 +484,10 @@ int main(int argc, char const *argv[]) {
 	/* Read in as much as possible in the biggest chunk size */
 	while (data_remaining > CHUNK_SIZE_DATA_MAX) {
 		if (print_debug) cout << "Creating chunk " << chunks_created << "... ";
-		data_remaining -= CHUNK_SIZE_DATA_MAX;
-		chunks_created++;
+		data_remaining -= CHUNK_SIZE_DATA_MAX; //decrease remaining data by chunk size
+		chunks_created++; //increment chunk count
 
-		file_data.resize(CHUNK_SIZE_DATA_MAX);
+		file_data.resize(CHUNK_SIZE_DATA_MAX); //this is a complete chunk so max size
 		input_B.read(reinterpret_cast<char *>(file_data.data()), CHUNK_SIZE_DATA_MAX);    
 
 		Chunk file(file_data.size(), as_type(CHUNK_TYPE_FILE), move(file_data), 0);
@@ -539,7 +537,6 @@ int main(int argc, char const *argv[]) {
 
 	/* Figure out where to insert chunks */
 	/* IHRD known to be leading chunk from above */
-
 	chunks.insert(chunks.begin() + 1, index);
 
 	vector<uint8_t> tmp;
